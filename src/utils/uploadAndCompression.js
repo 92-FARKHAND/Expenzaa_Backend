@@ -2,9 +2,6 @@ import {v2 as cloudinary} from "cloudinary"
 import sharp from "sharp"
 import { ApiError } from "./apiError.js"
 
-//todos
-// apply img size limit
-
 
 cloudinary.config({ 
   cloud_name: process.env.CLOUDINARY_NAME, 

@@ -32,7 +32,7 @@ const expenseSchema = new Schema(
     userId: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true
+      default:null
     },
     categoryId: {
       type: Schema.Types.ObjectId,
@@ -42,6 +42,11 @@ const expenseSchema = new Schema(
     organizationId: {
       type: Schema.Types.ObjectId,
       ref: "Organization",
+      default:null
+    },
+    createdBy:{
+      type:Schema.Types.ObjectId,
+      ref:"User",
       default:null
     }
   },

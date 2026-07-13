@@ -30,7 +30,7 @@ const budgetSchema = new Schema(
       type: Date,
       required: true,
     },
-    orgId: {
+    organizationId: {
       type: Schema.Types.ObjectId,
       ref: "Organization",
       default:null
@@ -38,14 +38,15 @@ const budgetSchema = new Schema(
     userId: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      default:null
+
     },
   },
   { timestamps: true }
 );
 
-/**
- * 🔹 Auto-calculate remaining amount before saving
+/*
+ * Auto-calculate remaining amount before saving
  * Keeps remaining = total - spent
  */
 budgetSchema.pre("save", function (next) {

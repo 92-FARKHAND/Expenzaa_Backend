@@ -1,9 +1,0 @@
-create expense controller that get category specific expenses using params 
-problems in middleware and also in sub budget controllers
-
-//Frontend Issues
-Sigout not work 
-profile menu btns in desktop view not work
-on expense edit the budget also changes if amount decrease the budget increase and vice versa
-edit budget and subbudget funtionality on Frontend
-route of set sub budget is wrong

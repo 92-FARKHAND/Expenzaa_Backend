@@ -5,7 +5,7 @@ const generalCategories = [
   { name: "food", image: "https://res.cloudinary.com/doth3mn81/image/upload/v1759500782/food_l5blw5.jpg" },
   { name: "transport", image: "https://res.cloudinary.com/doth3mn81/image/upload/v1759500781/transport_nlme1p.jpg" },
   { name: "utilities", image: "https://res.cloudinary.com/doth3mn81/image/upload/v1759500774/utility_xur5ea.jpg" },
-  { name: "entertainment", image: "https://res.cloudinary.com/doth3mn81/image/upload/v1752161841/samples/balloons.jpg" }
+  { name: "work & business", image: "https://res.cloudinary.com/doth3mn81/image/upload/v1752161841/samples/balloons.jpg" }
 ];
 
 export const seedCategories = async () => {

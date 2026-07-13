@@ -4,9 +4,13 @@ import { Budget } from "../models/budget.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import Decimal from "decimal.js";
 import mongoose from "mongoose";
+import { getOwnerFilter } from "../utils/filterOwner.js";
 
-const getUserBudget =  asyncHandler(async (req,res) => {
-    const budget = await Budget.findOne({userId:req?.user?._id}).lean();
+
+
+const getBudget =  asyncHandler(async (req,res) => {
+    const ownerFilter = getOwnerFilter(req);
+    const budget = await Budget.findOne(ownerFilter).lean();
     if (!budget) {
         throw new ApiError(404,"Budget not found");
     }
@@ -35,10 +39,12 @@ const getUserBudget =  asyncHandler(async (req,res) => {
     throw new ApiError(400, "At least one field is required");
   }
 
+  const ownerFilter = getOwnerFilter(req);
+
   // 🔹 Find existing budget
-  const existingBudget = await Budget.findOne({ userId: req?.user?._id });
+  const existingBudget = await Budget.findOne(ownerFilter);
   if (!existingBudget) {
-    throw new ApiError(404, "Budget not found for this user");
+    throw new ApiError(404, "Budget not found for this context");
   }
 
   // 🔹 Prepare updated fields
@@ -60,7 +66,7 @@ const getUserBudget =  asyncHandler(async (req,res) => {
 
   // 🔹 Update the document
   const updatedBudget = await Budget.findOneAndUpdate(
-    { userId: req?.user?._id },
+    ownerFilter,
     updatedFields,
     { new: true, lean: true }
   );
@@ -89,6 +95,6 @@ const getUserBudget =  asyncHandler(async (req,res) => {
 });
 
 export {
-    getUserBudget,
+    getBudget,
     editBudget
 }

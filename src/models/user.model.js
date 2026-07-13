@@ -1,51 +1,69 @@
-import { mongoose,Schema } from "mongoose";
+import  mongoose,{Schema } from "mongoose";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt"
-const userSchema = new Schema({
-    username:{
-        type:String,
-        required:true,
-        lowercase:true,
-        unique:true,
-        trim:true
+import bcrypt from "bcrypt";
+
+const userSchema = new Schema(
+  {
+    username: {
+      type: String,
+      required: true,
+      lowercase: true,
+      unique: true,
+      trim: true
+    },
+
+    fullName: {
+      type: String,
+      required: true,
+      trim: true
+    },
+
+    email: {
+      type: String,
+      required: true,
+      lowercase: true,
+      unique: true,
+      trim: true
+    },
+
+    avatar: {
+      type: String,
+      default:
+        "https://res.cloudinary.com/doth3mn81/image/upload/v1759509290/avatar_khahqh.jpg"
+    },
+
+    password: {
+      type: String,
+      required: true
+    },
+
+    planType: {
+      type: String,
+      enum: ["free", "pro"],
+      default: "free"
+    },
+
+    refreshToken: {
+      type: String
+    },
+
+    // CONTEXT 
+    currentContext: {
+      type: {
+        type: String,
+        enum: ["solo", "organization"],
+        default: "solo"
       },
-      role:{
-        type:String,
-        enum:['solo','admin','member'],
-        default:'solo',
-        lowercase:true,
-        required:true
-      },
-      planType:{
-       type:String,
-       enum:['free','pro'],
-       default:'free'
-      },
-      fullName:{
-        type:String,
-        required:true,
-        uppercase:true,
-        trim:true
-      },
-      email:{
-        type:String,
-        required:true,
-        lowercase:true,
-        unique:true,
-        trim:true
-      },
-      avatar:{
-        type:String,
-        default:'https://res.cloudinary.com/doth3mn81/image/upload/v1759509290/avatar_khahqh.jpg'
-      },
-      password:{
-        type:String,
-        required:true
-      },
-      refreshToken:{
-        type:String,
+      organizationId: {
+        type: Schema.Types.ObjectId,
+        ref: "Organization",
+        default: null
       }
-},{timestamps:true});
+    }
+  },
+  { timestamps: true }
+);
+
 
 userSchema.pre("save",async function (next) {
   if (this.isModified("password")) {
@@ -72,7 +90,8 @@ userSchema.methods.generateRefreshToken=  function(){
 userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
    {
-     _id:this._id
+     _id:this._id,
+     context:this.currentContext
     },
     process.env.ACCESS_TOKEN_SECRET,
     {

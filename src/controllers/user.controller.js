@@ -5,7 +5,8 @@ import {User} from "../models/user.model.js"
 import { Budget } from '../models/budget.model.js';
 import {SubBudget} from '../models/subBudget.model.js'
 import {Category} from '../models/category.model.js'
-
+import {Membership} from '../models/membership.model.js'
+import jwt from "jsonwebtoken";
 import { validationResult } from "express-validator";
 import {uploadOnCloudinary} from "../utils/uploadAndCompression.js"
 import mongoose from "mongoose";
@@ -27,9 +28,9 @@ const generateRefreshAndAccessToken = async(user_id)=>{
   } catch (error) {
     throw new ApiError(500,"Something went wrong while generating tokens");
   }
-}
-    
+};
 
+// SIGN UP
 const registerUser = asyncHandler(async (req, res) => {
   const errors = validationResult(req);
   const { username, role, fullName, email, password } = req.body;
@@ -38,91 +39,217 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, errors.array().map((err) => err.msg));
   }
 
-  // Check for existing user
+  // Check if user already exists
   const existedUser = await User.findOne({
     $or: [
       { username: username.toLowerCase() },
-      { email: email.toLowerCase() }
-    ]
+      { email: email.toLowerCase() },
+    ],
   });
 
   if (existedUser) {
     throw new ApiError(409, "User with username or email already exists");
   }
 
-  // Optional avatar upload
+  // Upload avatar before transaction
   let avatar;
   if (req.file?.buffer) {
     const avatarUpload = await uploadOnCloudinary(req.file.buffer);
     avatar = avatarUpload?.url;
   }
 
-  // Create the user
-  const user = await User.create({
-    username: username.toLowerCase(),
-    role,
-    fullName,
-    email,
-    avatar,
-    password
-  });
+  const session = await mongoose.startSession();
 
-  //  Create default budget for the new user
+  let user;
+
   try {
+    session.startTransaction();
+
+    // Create User
+    const users = await User.create(
+      [
+        {
+          username: username.toLowerCase(),
+          role,
+          fullName,
+          email: email.toLowerCase(),
+          avatar,
+          password,
+        },
+      ],
+      { session }
+    );
+
+    user = users[0];
+
+    // Create Budget
     const now = new Date();
     const oneMonthLater = new Date(now);
     oneMonthLater.setMonth(now.getMonth() + 1);
 
-    const budget = await Budget.create({
-      totalAmount: 0,
+    const budgets = await Budget.create(
+      [
+        {
+          totalAmount: 0,
+          spentAmount: 0,
+          remainingAmount: 0,
+          currency: "PKR",
+          startDate: now,
+          endDate: oneMonthLater,
+          userId: user._id,
+        },
+      ],
+      { session }
+    );
+
+    const budget = budgets[0];
+
+    // Fetch General Categories
+    const generalCategories = await Category.find({
+      isGeneral: true,
+    }).session(session);
+
+    // Create Sub Budgets
+    const subBudgets = generalCategories.map((category) => ({
+      categoryId: category._id,
+      userId: user._id,
+      budgetId: budget._id,
+      allocatedAmount: 0,
       spentAmount: 0,
       remainingAmount: 0,
-      currency: "PKR",     
-      startDate: now,      
-      endDate: oneMonthLater,
-      userId: user._id
-    });
+      currency: budget.currency,
+    }));
 
-//  Create SubBudgets for general categories (user-specific)
-const generalCategories = await Category.find({ isGeneral: true });
-const subBudgets = generalCategories.map(cat => ({
-  categoryId: cat._id,
-  userId: user._id,
-  budgetId: budget._id,
-  allocatedAmount: 0,
-  spentAmount: 0,
-  remainingAmount: 0,
-  currency: budget.currency
-}));
+    if (subBudgets.length) {
+      await SubBudget.insertMany(subBudgets, { session });
+    }
 
-await SubBudget.insertMany(subBudgets);
-
-  } catch (err) {
-    console.error(" Budget creation failed:", err);
-    await User.findByIdAndDelete(user?._id);
-    await Budget.deleteOne({ userId: user._id });
-    await SubBudget.deleteMany({userId:user?._id});
-    throw new ApiError(500, "Try again , Something went wrong");
+    await session.commitTransaction();
+  } catch (error) {
+    await session.abortTransaction();
+    throw new ApiError(500, "Try again, something went wrong.");
+  } finally {
+    session.endSession();
   }
 
-  // Generate tokens
-  const { accessToken, refreshToken } = await generateRefreshAndAccessToken(user._id);
-  const createdUser = await User.findById(user._id).select("-password -refreshToken");
+  // Generate Tokens (outside transaction)
+  const { accessToken, refreshToken } =
+    await generateRefreshAndAccessToken(user._id);
 
-  if (!createdUser) {
-    throw new ApiError(500, "Something went wrong while sign up");
-  }
+  const createdUser = await User.findById(user._id).select(
+    "-password -refreshToken"
+  );
 
-  // Send response with cookies
+  const responseData = {
+    ...createdUser.toObject(),
+    accessToken,
+  };
+
   return res
     .status(200)
     .cookie("accessToken", accessToken, options)
     .cookie("refreshToken", refreshToken, options)
-    .json(new ApiResponse(200, createdUser, "User registered successfully with default budget"));
+    .json(
+      new ApiResponse(
+        200,
+        responseData,
+        "User registered successfully with default budget"
+      )
+    );
 });
+// const registerUser = asyncHandler(async (req, res) => {
+//   const errors = validationResult(req);
+//   const { username, role, fullName, email, password } = req.body;
 
+//   if (!errors.isEmpty()) {
+//     throw new ApiError(400, errors.array().map((err) => err.msg));
+//   }
 
+//   // Check for existing user
+//   const existedUser = await User.findOne({
+//     $or: [
+//       { username: username.toLowerCase() },
+//       { email: email.toLowerCase() }
+//     ]
+//   });
 
+//   if (existedUser) {
+//     throw new ApiError(409, "User with username or email already exists");
+//   }
+
+//   // Optional avatar upload
+//   let avatar;
+//   if (req.file?.buffer) {
+//     const avatarUpload = await uploadOnCloudinary(req.file.buffer);
+//     avatar = avatarUpload?.url;
+//   }
+
+//   // Create the user
+//   const user = await User.create({
+//     username: username.toLowerCase(),
+//     role,
+//     fullName,
+//     email,
+//     avatar,
+//     password
+//   });
+
+//   //  Create default budget for the new user
+//   try {
+//     const now = new Date();
+//     const oneMonthLater = new Date(now);
+//     oneMonthLater.setMonth(now.getMonth() + 1);
+
+//     const budget = await Budget.create({
+//       totalAmount: 0,
+//       spentAmount: 0,
+//       remainingAmount: 0,
+//       currency: "PKR",     
+//       startDate: now,      
+//       endDate: oneMonthLater,
+//       userId: user._id
+//     });
+
+// //  Create SubBudgets for general categories (user-specific)
+// const generalCategories = await Category.find({ isGeneral: true });
+// const subBudgets = generalCategories.map(cat => ({
+//   categoryId: cat._id,
+//   userId: user._id,
+//   budgetId: budget._id,
+//   allocatedAmount: 0,
+//   spentAmount: 0,
+//   remainingAmount: 0,
+//   currency: budget.currency
+// }));
+
+// await SubBudget.insertMany(subBudgets);
+
+//   } catch (err) {
+//     console.error(" Budget creation failed:", err);
+//     await User.findByIdAndDelete(user?._id);
+//     await Budget.deleteOne({ userId: user._id });
+//     await SubBudget.deleteMany({userId:user?._id});
+//     throw new ApiError(500, "Try again , Something went wrong");
+//   }
+
+//   // Generate tokens
+//   const { accessToken, refreshToken } = await generateRefreshAndAccessToken(user._id);
+//   const createdUser = await User.findById(user._id).select("-password -refreshToken");
+
+//   const responseData = {
+//     ...createdUser.toObject(),
+//     accessToken
+//   };
+
+//   // Send response with cookies
+//   return res
+//     .status(200)
+//     .cookie("accessToken", accessToken, options)
+//     .cookie("refreshToken", refreshToken, options)
+//     .json(new ApiResponse(200, responseData, "User registered successfully with default budget"));
+// });
+
+// SIGN IN
 const logIn = asyncHandler(async (req,res) => {
    const {username , password} = req.body;
    if(!username || !password){
@@ -148,13 +275,15 @@ const logIn = asyncHandler(async (req,res) => {
     new ApiResponse(
       200,
       {
-       user: loggedIn 
+       user: loggedIn ,
+       context : loggedIn.currentContext
       },
       "User logged in successfully"
     )
    )
 });
 
+// SIGN OUT
 const logOut = asyncHandler(async(req,res)=>{
   await User.findByIdAndUpdate(req.user._id,
   {
@@ -179,6 +308,7 @@ return res
 )
 });
 
+// FETCH PROFILE
 const getUserProfile = asyncHandler(async (req,res) => {
   const user = req.user;
   if (!user) {
@@ -195,6 +325,7 @@ const getUserProfile = asyncHandler(async (req,res) => {
   )
 });
 
+// CHANGE PASSWORD
 const changePassword = asyncHandler(async (req,res) => {
   const {oldPassword, newPassword} = req.body;
   const user = await User.findById(req.user?._id)
@@ -210,6 +341,7 @@ const changePassword = asyncHandler(async (req,res) => {
   .json(new ApiResponse(200 , {},"Password Changed Successfully"))
 });
 
+// UPDATE PROFILE DETAILS
 const updateUserProfile = asyncHandler(async (req,res) => {
   const {username ,fullName,email} = req.body;
   if(!username && !email && !fullName){
@@ -264,7 +396,7 @@ const updateUserProfile = asyncHandler(async (req,res) => {
   )
 });
 
-//todo delete old one but if old one is default do not destroy
+// UPDATE PROFILE IMAGE
 const updateAvatar = asyncHandler(async(req,res)=>{
    const avatarBuffer = req.file?.buffer;
    if (!avatarBuffer) {
@@ -295,15 +427,21 @@ const updateAvatar = asyncHandler(async(req,res)=>{
    )
 });
 
+// DELETE USER
 const deleteUser = asyncHandler(async (req,res) => {
   const userId = new mongoose.Types.ObjectId(req.user._id);
   const user = await User.findById(userId);
   const budget = await Budget.findOne({userId})
+  const subBudget = await SubBudget.find({userId});
+  const categories = await Category.find({userId})
+
   if (!user) {
     throw new ApiError(404,"User not found");
   }
   await budget.deleteOne();
   await user.deleteOne();
+  await subBudget.deleteMany();
+  await Category.deleteMany();
 
   return res
   .status(200)
@@ -311,6 +449,129 @@ const deleteUser = asyncHandler(async (req,res) => {
     new ApiResponse(200,{},"User Deleted Successfully")
   ) 
 });
+
+// SWITCH MODE [SOLO, ORGANIZATION]
+const switchContext = asyncHandler(async(req,res)=>{
+ const { organizationId } = req.body;
+
+  // Solo mode
+  if (!organizationId) {
+    await User.findByIdAndUpdate(req.user._id, {
+      currentContext: { type: "solo", organizationId: null },
+    });
+
+    return res.status(200).json(
+      new ApiResponse(200, { context: "solo" }, "Switched to solo mode")
+    );
+  }
+
+  // Org mode
+  const membership = await Membership.findOne({
+    userId: req.user._id,
+    organizationId,
+    status: "active",
+  });
+
+  if (!membership) {
+    throw new ApiError(403, "You are not a member of this organization");
+  }
+
+  await User.findByIdAndUpdate(req.user._id, {
+    currentContext: { type: "organization", organizationId: organizationId },
+  });
+
+  return res.status(200).json(
+    new ApiResponse(200, {
+      context: "organization",
+      organizationId: organizationId,
+      role: membership.role,
+    }, "Switched to organization")
+  );
+});
+
+// SERACH USER & ORG
+const globalSearch = asyncHandler(async (req, res) => {
+  const { q, type } = req.query;
+
+  if (!q || q.trim().length < 2) {
+    throw new ApiError(400, "Search query too short");
+  }
+
+  if (!["user", "org"].includes(type)) {
+    throw new ApiError(400, "Invalid search type");
+  }
+
+  let results;
+
+  if (type === "user") {
+    results = await User.find({
+      $or: [
+        { username: { $regex: q, $options: "i" } },
+        { email: { $regex: q, $options: "i" } }
+      ]
+    }).select("_id username email");
+  }
+
+  if (type === "org") {
+    results = await Organization.find({
+      name: { $regex: q, $options: "i" }
+    }).select("_id name memberCount");
+  }
+
+  return res.status(200).json(
+    new ApiResponse(200, results, "Search results")
+  );
+});
+
+
+// REFRESH ACCESS TOKEN
+const refreshAccessToken = asyncHandler(async (req, res) => {
+  const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
+
+  if (!incomingRefreshToken) {
+    throw new ApiError(401, "Unauthorized request: Refresh token is missing");
+  }
+
+  try {
+    const decodedToken = jwt.verify(
+      incomingRefreshToken,
+      process.env.REFRESH_TOKEN_SECRET
+    );
+
+    const user = await User.findById(decodedToken?._id);
+
+    if (!user) {
+      throw new ApiError(401, "Invalid refresh token");
+    }
+
+    if (incomingRefreshToken !== user.refreshToken) {
+      throw new ApiError(401, "Refresh token is expired or used");
+    }
+
+    const { accessToken, refreshToken: newRefreshToken } = await generateRefreshAndAccessToken(user._id);
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+
+    return res
+      .status(200)
+      .cookie("accessToken", accessToken, options)
+      .cookie("refreshToken", newRefreshToken, options)
+      .json({
+        statusCode: 200,
+        success: true,
+        message: "Access token refreshed successfully",
+        accessToken,
+        user: loggedInUser,
+        data: {
+          accessToken,
+          user: loggedInUser,
+          context: loggedInUser.currentContext
+        }
+      });
+  } catch (error) {
+    throw new ApiError(401, error?.message || "Invalid refresh token");
+  }
+});
+
 
 export{
   registerUser,
@@ -320,5 +581,8 @@ export{
   changePassword,
   updateUserProfile,
   updateAvatar,
-  deleteUser
+  deleteUser,
+  switchContext,
+  globalSearch,
+  refreshAccessToken
 }

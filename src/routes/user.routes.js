@@ -9,7 +9,8 @@ import {
      changePassword,
      updateUserProfile,
      updateAvatar,
-     deleteUser
+     deleteUser,
+     switchContext
      } from "../controllers/user.controller.js";
 import verifyJWT from "../middlewares/auth.middleware.js";
 
@@ -27,10 +28,9 @@ router.route("/logout").post(verifyJWT,logOut)
 router.route("/profile").get(verifyJWT,getUserProfile)
 router.route("/change-password").patch(verifyJWT,changePassword)
 router.route("/update-profile").patch(verifyJWT,updateUserProfile)
-router.route("/update-avatar").patch(verifyJWT,
-    upload.single("avatar")
-    ,updateAvatar)
+router.route("/update-avatar").patch(verifyJWT, upload.single("avatar") ,updateAvatar)
 router.route("/delete-account").delete(verifyJWT,deleteUser)
+router.route("/switch-context").post(verifyJWT,switchContext)
 
 
 export default router;
