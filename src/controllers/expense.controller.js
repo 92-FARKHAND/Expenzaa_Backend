@@ -750,7 +750,6 @@ const deleteExpense = asyncHandler(async (req, res) => {
 const getExpensesByContext = asyncHandler(async (req, res) => {
   //Build filter based on context
   const ownerFilter = getOwnerFilter(req);
-  console.log(ownerFilter);
 
   //fetch expense
   const expenses = await Expense.find(ownerFilter)
@@ -772,7 +771,6 @@ const getExpensesByContext = asyncHandler(async (req, res) => {
 
 const getMonthlyExpenses = asyncHandler(async (req, res) => {
   const ownerFilter = getOwnerFilter(req);
-  console.log(ownerFilter);
   
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);

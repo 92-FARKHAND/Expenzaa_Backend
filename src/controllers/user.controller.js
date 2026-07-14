@@ -14,8 +14,10 @@ import mongoose from "mongoose";
 const options ={
   httpOnly:true,
   secure:true,
-  //sameSite:None this allow to send request from front end that is on another domain by efault its value is lax that stops cookies acceptance from other origins and for excellent level of security if both ends are on same domain than we use strict now i handle malicious requests to stop them using CORS
+  sameSite:None,
 }
+//  this allow to send request from front end that is on another domain by efault its value is lax that stops cookies acceptance from other origins and for excellent level of security if both ends are on same domain than we use strict now i handle malicious requests to stop them using CORS
+
 const generateRefreshAndAccessToken = async(user_id)=>{
   try {
     const user = await User.findById(user_id);

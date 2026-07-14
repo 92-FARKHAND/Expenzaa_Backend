@@ -867,8 +867,6 @@ const updateMemberRole = asyncHandler(async (req, res) => {
   const { organizationId, memberId } = req.params;
   const { role } = req.body;
   const userId = req.user._id;
-
-   console.log(organizationId,memberId,role);
    
   // VALIDATE INPUT
   if (!organizationId || !memberId) {
