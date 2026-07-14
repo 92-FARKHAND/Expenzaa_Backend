@@ -7,7 +7,6 @@ const connectDB = async()=>{
             `${process.env.DB_URI}/${DB_NAME}`
         );
         console.log(`\n✅ MongoDB connected: ${connectionInstance.connection.host}`);
-        console.log("DB URI",process.env.DB_URI);
         
     } catch (error) {
         console.error("❌ MONGODB connection FAILED", error);
