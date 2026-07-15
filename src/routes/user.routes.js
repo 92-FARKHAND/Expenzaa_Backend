@@ -10,7 +10,8 @@ import {
      updateUserProfile,
      updateAvatar,
      deleteUser,
-     switchContext
+     switchContext,
+     refreshAccessToken
      } from "../controllers/user.controller.js";
 import verifyJWT from "../middlewares/auth.middleware.js";
 
@@ -22,6 +23,8 @@ router.route("/register").post(
     registerUser
 )
 router.route("/login").post(logIn)
+router.route("/auth/refresh").post(refreshAccessToken)
+
 
 //secure routes
 router.route("/logout").post(verifyJWT,logOut)
