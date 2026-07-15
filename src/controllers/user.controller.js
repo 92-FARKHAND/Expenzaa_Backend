@@ -152,11 +152,15 @@ const registerUser = asyncHandler(async (req, res) => {
     .cookie("accessToken", accessToken, options)
     .cookie("refreshToken", refreshToken, options)
     .json(
-      new ApiResponse(
-        200,
-        responseData,
-        "User registered successfully with default budget"
-      )
+  new ApiResponse(
+    200,
+    {
+      accessToken,
+      user: createdUser,
+      context: createdUser.currentContext
+    },
+    "User registered  successfully"
+  )
     );
 });
 // const registerUser = asyncHandler(async (req, res) => {
@@ -269,20 +273,21 @@ const logIn = asyncHandler(async (req,res) => {
    const {accessToken,refreshToken} = await generateRefreshAndAccessToken(user._id);
    const loggedIn = await User.findById(user._id).select("-password -refreshToken")
 
-   return res
-   .status(200)
-   .cookie("accessToken",accessToken,options)
-   .cookie("refreshToken",refreshToken,options)
-   .json(
-    new ApiResponse(
-      200,
-      {
-       user: loggedIn ,
-       context : loggedIn.currentContext
-      },
-      "User logged in successfully"
-    )
-   )
+return res
+.status(200)
+.cookie("accessToken", accessToken, options)
+.cookie("refreshToken", refreshToken, options)
+.json(
+  new ApiResponse(
+    200,
+    {
+      accessToken,
+      user: loggedIn,
+      context: loggedIn.currentContext
+    },
+    "User logged in successfully"
+  )
+);
 });
 
 // SIGN OUT
@@ -553,22 +558,21 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     const { accessToken, refreshToken: newRefreshToken } = await generateRefreshAndAccessToken(user._id);
     const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
 
-    return res
-      .status(200)
-      .cookie("accessToken", accessToken, options)
-      .cookie("refreshToken", newRefreshToken, options)
-      .json({
-        statusCode: 200,
-        success: true,
-        message: "Access token refreshed successfully",
-        accessToken,
-        user: loggedInUser,
-        data: {
-          accessToken,
-          user: loggedInUser,
-          context: loggedInUser.currentContext
-        }
-      });
+return res
+.status(200)
+.cookie("accessToken", accessToken, options)
+.cookie("refreshToken", newRefreshToken, options)
+.json(
+  new ApiResponse(
+    200,
+    {
+      accessToken,
+      user: loggedInUser,
+      context: loggedInUser.currentContext
+    },
+    "Access token refreshed successfully"
+  )
+);
   } catch (error) {
     throw new ApiError(401, error?.message || "Invalid refresh token");
   }
