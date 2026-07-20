@@ -163,99 +163,7 @@ const registerUser = asyncHandler(async (req, res) => {
   )
     );
 });
-// const registerUser = asyncHandler(async (req, res) => {
-//   const errors = validationResult(req);
-//   const { username, role, fullName, email, password } = req.body;
-
-//   if (!errors.isEmpty()) {
-//     throw new ApiError(400, errors.array().map((err) => err.msg));
-//   }
-
-//   // Check for existing user
-//   const existedUser = await User.findOne({
-//     $or: [
-//       { username: username.toLowerCase() },
-//       { email: email.toLowerCase() }
-//     ]
-//   });
-
-//   if (existedUser) {
-//     throw new ApiError(409, "User with username or email already exists");
-//   }
-
-//   // Optional avatar upload
-//   let avatar;
-//   if (req.file?.buffer) {
-//     const avatarUpload = await uploadOnCloudinary(req.file.buffer);
-//     avatar = avatarUpload?.url;
-//   }
-
-//   // Create the user
-//   const user = await User.create({
-//     username: username.toLowerCase(),
-//     role,
-//     fullName,
-//     email,
-//     avatar,
-//     password
-//   });
-
-//   //  Create default budget for the new user
-//   try {
-//     const now = new Date();
-//     const oneMonthLater = new Date(now);
-//     oneMonthLater.setMonth(now.getMonth() + 1);
-
-//     const budget = await Budget.create({
-//       totalAmount: 0,
-//       spentAmount: 0,
-//       remainingAmount: 0,
-//       currency: "PKR",     
-//       startDate: now,      
-//       endDate: oneMonthLater,
-//       userId: user._id
-//     });
-
-// //  Create SubBudgets for general categories (user-specific)
-// const generalCategories = await Category.find({ isGeneral: true });
-// const subBudgets = generalCategories.map(cat => ({
-//   categoryId: cat._id,
-//   userId: user._id,
-//   budgetId: budget._id,
-//   allocatedAmount: 0,
-//   spentAmount: 0,
-//   remainingAmount: 0,
-//   currency: budget.currency
-// }));
-
-// await SubBudget.insertMany(subBudgets);
-
-//   } catch (err) {
-//     console.error(" Budget creation failed:", err);
-//     await User.findByIdAndDelete(user?._id);
-//     await Budget.deleteOne({ userId: user._id });
-//     await SubBudget.deleteMany({userId:user?._id});
-//     throw new ApiError(500, "Try again , Something went wrong");
-//   }
-
-//   // Generate tokens
-//   const { accessToken, refreshToken } = await generateRefreshAndAccessToken(user._id);
-//   const createdUser = await User.findById(user._id).select("-password -refreshToken");
-
-//   const responseData = {
-//     ...createdUser.toObject(),
-//     accessToken
-//   };
-
-//   // Send response with cookies
-//   return res
-//     .status(200)
-//     .cookie("accessToken", accessToken, options)
-//     .cookie("refreshToken", refreshToken, options)
-//     .json(new ApiResponse(200, responseData, "User registered successfully with default budget"));
-// });
-
-// SIGN IN
+//SIGN IN
 const logIn = asyncHandler(async (req,res) => {
    const {username , password} = req.body;
    if(!username || !password){
@@ -313,6 +221,53 @@ return res
    "User logged out successfully"
   )
 )
+});
+
+// REFRESH ACCESS TOKEN
+const refreshAccessToken = asyncHandler(async (req, res) => {
+  const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
+
+  if (!incomingRefreshToken) {
+    throw new ApiError(401, "Unauthorized request: Refresh token is missing");
+  }
+
+  try {
+    const decodedToken = jwt.verify(
+      incomingRefreshToken,
+      process.env.REFRESH_TOKEN_SECRET
+    );
+
+    const user = await User.findById(decodedToken?._id);
+
+    if (!user) {
+      throw new ApiError(401, "Invalid refresh token");
+    }
+
+    if (incomingRefreshToken !== user.refreshToken) {
+      throw new ApiError(401, "Refresh token is expired or used");
+    }
+
+    const { accessToken, refreshToken: newRefreshToken } = await generateRefreshAndAccessToken(user._id);
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+
+return res
+.status(200)
+.cookie("accessToken", accessToken, options)
+.cookie("refreshToken", newRefreshToken, options)
+.json(
+  new ApiResponse(
+    200,
+    {
+      accessToken,
+      user: loggedInUser,
+      context: loggedInUser.currentContext
+    },
+    "Access token refreshed successfully"
+  )
+);
+  } catch (error) {
+    throw new ApiError(401, error?.message || "Invalid refresh token");
+  }
 });
 
 // FETCH PROFILE
@@ -458,42 +413,51 @@ const deleteUser = asyncHandler(async (req,res) => {
 });
 
 // SWITCH MODE [SOLO, ORGANIZATION]
-const switchContext = asyncHandler(async(req,res)=>{
- const { organizationId } = req.body;
+const switchContext = asyncHandler(async (req, res) => {
+  const { organizationId } = req.body;
 
-  // Solo mode
+  let updatedContext;
+  let membership = null;
+
   if (!organizationId) {
-    await User.findByIdAndUpdate(req.user._id, {
-      currentContext: { type: "solo", organizationId: null },
+    updatedContext = { type: "solo", organizationId: null };
+  } else {
+    membership = await Membership.findOne({
+      userId: req.user._id,
+      organizationId,
+      status: "active",
     });
 
-    return res.status(200).json(
-      new ApiResponse(200, { context: "solo" }, "Switched to solo mode")
-    );
+    if (!membership) {
+      throw new ApiError(403, "You are not a member of this organization");
+    }
+
+    updatedContext = { type: "organization", organizationId };
   }
 
-  // Org mode
-  const membership = await Membership.findOne({
-    userId: req.user._id,
-    organizationId,
-    status: "active",
-  });
-
-  if (!membership) {
-    throw new ApiError(403, "You are not a member of this organization");
-  }
-
-  await User.findByIdAndUpdate(req.user._id, {
-    currentContext: { type: "organization", organizationId: organizationId },
-  });
-
-  return res.status(200).json(
-    new ApiResponse(200, {
-      context: "organization",
-      organizationId: organizationId,
-      role: membership.role,
-    }, "Switched to organization")
+  const user = await User.findByIdAndUpdate(
+    req.user._id,
+    { currentContext: updatedContext },
+    { new: true }
   );
+
+  // Reissue access token so the JWT's embedded context matches immediately
+  const accessToken = user.generateAccessToken();
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .json(
+      new ApiResponse(
+        200,
+        {
+          accessToken,
+          context: updatedContext,
+          role: membership?.role,
+        },
+        `Switched to ${updatedContext.type}`
+      )
+    );
 });
 
 // SERACH USER & ORG
@@ -531,52 +495,98 @@ const globalSearch = asyncHandler(async (req, res) => {
 });
 
 
-// REFRESH ACCESS TOKEN
-const refreshAccessToken = asyncHandler(async (req, res) => {
-  const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
 
-  if (!incomingRefreshToken) {
-    throw new ApiError(401, "Unauthorized request: Refresh token is missing");
-  }
+// const registerUser = asyncHandler(async (req, res) => {
+//   const errors = validationResult(req);
+//   const { username, role, fullName, email, password } = req.body;
 
-  try {
-    const decodedToken = jwt.verify(
-      incomingRefreshToken,
-      process.env.REFRESH_TOKEN_SECRET
-    );
+//   if (!errors.isEmpty()) {
+//     throw new ApiError(400, errors.array().map((err) => err.msg));
+//   }
 
-    const user = await User.findById(decodedToken?._id);
+//   // Check for existing user
+//   const existedUser = await User.findOne({
+//     $or: [
+//       { username: username.toLowerCase() },
+//       { email: email.toLowerCase() }
+//     ]
+//   });
 
-    if (!user) {
-      throw new ApiError(401, "Invalid refresh token");
-    }
+//   if (existedUser) {
+//     throw new ApiError(409, "User with username or email already exists");
+//   }
 
-    if (incomingRefreshToken !== user.refreshToken) {
-      throw new ApiError(401, "Refresh token is expired or used");
-    }
+//   // Optional avatar upload
+//   let avatar;
+//   if (req.file?.buffer) {
+//     const avatarUpload = await uploadOnCloudinary(req.file.buffer);
+//     avatar = avatarUpload?.url;
+//   }
 
-    const { accessToken, refreshToken: newRefreshToken } = await generateRefreshAndAccessToken(user._id);
-    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+//   // Create the user
+//   const user = await User.create({
+//     username: username.toLowerCase(),
+//     role,
+//     fullName,
+//     email,
+//     avatar,
+//     password
+//   });
 
-return res
-.status(200)
-.cookie("accessToken", accessToken, options)
-.cookie("refreshToken", newRefreshToken, options)
-.json(
-  new ApiResponse(
-    200,
-    {
-      accessToken,
-      user: loggedInUser,
-      context: loggedInUser.currentContext
-    },
-    "Access token refreshed successfully"
-  )
-);
-  } catch (error) {
-    throw new ApiError(401, error?.message || "Invalid refresh token");
-  }
-});
+//   //  Create default budget for the new user
+//   try {
+//     const now = new Date();
+//     const oneMonthLater = new Date(now);
+//     oneMonthLater.setMonth(now.getMonth() + 1);
+
+//     const budget = await Budget.create({
+//       totalAmount: 0,
+//       spentAmount: 0,
+//       remainingAmount: 0,
+//       currency: "PKR",     
+//       startDate: now,      
+//       endDate: oneMonthLater,
+//       userId: user._id
+//     });
+
+// //  Create SubBudgets for general categories (user-specific)
+// const generalCategories = await Category.find({ isGeneral: true });
+// const subBudgets = generalCategories.map(cat => ({
+//   categoryId: cat._id,
+//   userId: user._id,
+//   budgetId: budget._id,
+//   allocatedAmount: 0,
+//   spentAmount: 0,
+//   remainingAmount: 0,
+//   currency: budget.currency
+// }));
+
+// await SubBudget.insertMany(subBudgets);
+
+//   } catch (err) {
+//     console.error(" Budget creation failed:", err);
+//     await User.findByIdAndDelete(user?._id);
+//     await Budget.deleteOne({ userId: user._id });
+//     await SubBudget.deleteMany({userId:user?._id});
+//     throw new ApiError(500, "Try again , Something went wrong");
+//   }
+
+//   // Generate tokens
+//   const { accessToken, refreshToken } = await generateRefreshAndAccessToken(user._id);
+//   const createdUser = await User.findById(user._id).select("-password -refreshToken");
+
+//   const responseData = {
+//     ...createdUser.toObject(),
+//     accessToken
+//   };
+
+//   // Send response with cookies
+//   return res
+//     .status(200)
+//     .cookie("accessToken", accessToken, options)
+//     .cookie("refreshToken", refreshToken, options)
+//     .json(new ApiResponse(200, responseData, "User registered successfully with default budget"));
+// });
 
 
 export{
