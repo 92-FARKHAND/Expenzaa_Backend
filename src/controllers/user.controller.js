@@ -155,9 +155,7 @@ const registerUser = asyncHandler(async (req, res) => {
   new ApiResponse(
     200,
     {
-      accessToken,
-      user: createdUser,
-      context: createdUser.currentContext
+      user: responseData,
     },
     "User registered  successfully"
   )
@@ -189,9 +187,7 @@ return res
   new ApiResponse(
     200,
     {
-      accessToken,
       user: loggedIn,
-      context: loggedIn.currentContext
     },
     "User logged in successfully"
   )
@@ -258,9 +254,7 @@ return res
   new ApiResponse(
     200,
     {
-      accessToken,
       user: loggedInUser,
-      context: loggedInUser.currentContext
     },
     "Access token refreshed successfully"
   )
@@ -451,7 +445,6 @@ const switchContext = asyncHandler(async (req, res) => {
       new ApiResponse(
         200,
         {
-          accessToken,
           context: updatedContext,
           role: membership?.role,
         },

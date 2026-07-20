@@ -273,7 +273,6 @@ const getOrganizationDetails = asyncHandler(async (req, res) => {
   }
 
   //VERIFY USER MEMBERSHIP
-  //VERIFY USER MEMBERSHIP
   const membership = await Membership.findOne({
     userId: userId,
     organizationId: organizationId,
@@ -295,7 +294,7 @@ const getOrganizationDetails = asyncHandler(async (req, res) => {
   // FETCH MEMBERS
   const members = await Membership.find({
     organizationId: organizationId,
-    status: "active",
+    status: { $in: ["active", "invited"] },
   })
     .populate("userId", "username email fullName avatar planType")
     .sort({ createdAt: 1 }); //oldest first
